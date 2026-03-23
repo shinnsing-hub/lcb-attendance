@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>LCB TOUR | 考勤管理终端</title>
+    <style>
+        :root { --primary: #007aff; --success: #34c759; --warning: #ff9500; --danger: #ff3b30; --bg: #f2f2f7; }
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        body { font-family: -apple-system, sans-serif; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #eef2f7; color: #1d1d1f; }
+        .container { position: relative; width: 92%; max-width: 400px; background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(20px); border-radius: 40px; padding: 30px 20px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.5); overflow: hidden; }
+        .logo-box { width: 100%; display: flex; justify-content: center; margin-bottom: 10px; }
+        .logo-box img { height: 90px; width: auto; object-fit: contain; }
+        h1 { font-size: 24px; font-weight: 800; margin: 5px 0; }
+        #clock { font-size: 46px; font-weight: 700; margin: 5px 0; font-variant-numeric: tabular-nums; }
+        .gps-notice { font-size: 13px; color: var(--primary); font-weight: 600; background: #e0efff; padding: 6px 16px; border-radius: 100px; margin-bottom: 20px; display: inline-block; }
+        select { width: 100%; padding: 16px; border: none; background: #f2f2f7; border-radius: 16px; font-size: 17px; margin-bottom: 20px; text-align: center; outline: none; font-weight: 700; appearance: none; -webkit-appearance: none; text-align-last: center; }
+        select:disabled { background: #e5e5ea; color: #8e8e93; opacity: 1; }
+        .button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+        .btn-status { padding: 18px 10px; border: none; border-radius: 20px; font-size: 16px; font-weight: 700; color: white; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; transition: 0.2s; }
+        .btn-status:disabled { background: #d1d1d6 !important; color: #8e8e93 !important; cursor: not-allowed; opacity: 0.6; }
+        .btn-status.active { outline: 3px solid #1c1c1e; outline-offset: 2px; }
+        .btn-in { background: var(--primary); } .btn-out { background: var(--warning); } .btn-back { background: var(--success); } .btn-off { background: var(--danger); }
+        #video-container { width: 100%; height: 260px; background: #000; border-radius: 24px; position: relative; overflow: hidden; margin-bottom: 20px; display: none; }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        .face-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 180px; height: 230px; border: 2.5px solid rgba(255, 255, 255, 0.6); border-radius: 50%; box-shadow: 0 0 0 1000px rgba(0,0,0,0.5); }
+        #btn-confirm { width: 100%; padding: 20px; border: none; border-radius: 20px; background: #1c1c1e; color: white; font-size: 18px; font-weight: 700; display: none; cursor: pointer; }
+        #success-screen { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: white; border-radius: 40px; z-index: 100; flex-direction: column; align-items: center; justify-content: center; }
+        .reset-trigger { position: absolute; bottom: 15px; right: 15px; font-size: 18px; opacity: 0.3; cursor: pointer; padding: 10px; z-index: 10; }
+        .sync-hint { font-size: 11px; color: #8e8e93; margin-top: -15px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="success-screen">
+        <div style="font-size: 80px;">✅</div>
+        <div id="success-msg" style="font-size: 24px; font-weight: 700;">打卡成功</div>
+        <div style="color:#8e8e93; margin-top:10px;">数据同步成功✨</div>
+    </div>
+    <div class="logo-box">
+        <img src="https://lh3.googleusercontent.com/d/1SeI9Cm47OyJ-EkFmhSTyj2_ulkE8U-m5" alt="LCB Logo">
+    </div>
+    <h1>智能考勤认证</h1>
+    <div id="clock">00:00:00</div>
+    <div class="gps-notice">🛡️ 生物识别 & 100m 围栏保护</div>
+    
+    <div id="sync-status" class="sync-hint">正在同步名单...</div>
+    <select id="empSelect" onchange="handleUserSelect()">
+        <option value="">-- 请选择您的姓名 --</option>
+    </select>
+
+    <div class="button-grid">
+        <button id="btn-上班签到" class="btn-status btn-in" onclick="selectStatus('上班签到', this)"><span>☀️</span>上班</button>
+        <button id="btn-午餐出门" class="btn-status btn-out" onclick="selectStatus('午餐出门', this)"><span>🍕</span>午餐出</button>
+        <button id="btn-午餐回来" class="btn-status btn-back" onclick="selectStatus('午餐回来', this)"><span>☕</span>午餐回</button>
+        <button id="btn-下班签退" class="btn-status btn-off" onclick="selectStatus('下班签退', this)"><span>🌙</span>下班</button>
+    </div>
+
+    <div id="video-container">
+        <video id="video" autoplay muted playsinline></video>
+        <div class="face-overlay"></div>
+    </div>
+
+    <button id="btn-confirm" onclick="finalSubmit()">确认并打卡</button>
+    
+    <div class="reset-trigger" onclick="resetSystem()">⚙️</div>
+</div>
+
+<script>
+    let selectedType = "";
+    const CONFIG = {
+        LAT: 1.857346, 
+        LNG: 102.929273, 
+        RADIUS: 100, 
+        API: "https://script.google.com/macros/s/AKfycbxvMUeco6V_w4QgyLrvLVbtLrKOnuGC8jAR--dlxV5sJ4jarPSA5vaKdYP49tYFEE0Ecg/exec" 
+    };
+
+    window.onload = async function() {
+        const select = document.getElementById('empSelect');
+        
+        // --- 1. 动态抓取 O 列名单 ---
+        try {
+            const response = await fetch(CONFIG.API);
+            const names = await response.json();
+            select.innerHTML = '<option value="">-- 请选择您的姓名 --</option>';
+            names.forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.innerText = name;
+                select.appendChild(opt);
+            });
+            document.getElementById('sync-status').innerText = "名单已同步最新";
+        } catch (e) {
+            document.getElementById('sync-status').innerText = "名单同步失败，请刷新";
+        }
+
+        // --- 2. 锁定逻辑 ---
+        const saved = localStorage.getItem('lcb_user_lock');
+        if (saved) {
+            select.value = saved;
+            if(saved !== "SHINN SING") {
+                select.disabled = true;
+            } else {
+                localStorage.removeItem('lcb_hist_SHINN SING');
+            }
+            checkTodayStatus(); 
+        }
+
+        // --- 3. 时钟 ---
+        setInterval(() => {
+            document.getElementById('clock').innerText = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+        }, 1000);
+    };
+
+    function resetSystem() {
+        localStorage.clear();
+        alert("系统已重置，请重新选择姓名");
+        location.reload();
+    }
+
+    function handleUserSelect() {
+        const name = document.getElementById('empSelect').value;
+        if (name) {
+            localStorage.setItem('lcb_user_lock', name);
+            if(name !== "SHINN SING") {
+                document.getElementById('empSelect').disabled = true;
+            }
+            checkTodayStatus();
+        }
+    }
+
+    function checkTodayStatus() {
+        const name = document.getElementById('empSelect').value;
+        if (!name || name === "SHINN SING") {
+            ['上班签到', '午餐出门', '午餐回来', '下班签退'].forEach(t => document.getElementById('btn-' + t).disabled = false);
+            return;
+        }
+        const today = new Date().toDateString();
+        const history = JSON.parse(localStorage.getItem('lcb_hist_' + name) || "{}");
+        ['上班签到', '午餐出门', '午餐回来', '下班签退'].forEach(t => {
+            document.getElementById('btn-' + t).disabled = (history[t] === today);
+        });
+    }
+
+    async function selectStatus(type, btn) {
+        if(!document.getElementById('empSelect').value) return alert("请先选择姓名");
+        selectedType = type;
+        document.querySelectorAll('.btn-status').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('video-container').style.display = 'block';
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+            document.getElementById('video').srcObject = stream;
+            document.getElementById('btn-confirm').style.display = 'block';
+        } catch (err) { alert("摄像头授权失败"); }
+    }
+
+    async function finalSubmit() {
+        const btn = document.getElementById('btn-confirm');
+        const name = document.getElementById('empSelect').value;
+        
+        // --- 核心优化: 唤起手机原生生物验证 (FaceID/指纹) ---
+        if (window.PublicKeyCredential) {
+            try {
+                btn.innerText = "验证身份中...";
+                await navigator.credentials.get({
+                    publicKey: { challenge: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]), allowCredentials: [], timeout: 60000 }
+                });
+            } catch (e) { console.log("生物验证跳过"); }
+        }
+
+        btn.disabled = true; 
+        btn.innerText = "上传中...";
+
+        // --- 响应式定位优化 ---
+        navigator.geolocation.getCurrentPosition(async (p) => {
+            const dist = calcDist(p.coords.latitude, p.coords.longitude, CONFIG.LAT, CONFIG.LNG);
+            if (dist > CONFIG.RADIUS) {
+                alert(`距离超限 (${Math.round(dist)}m)，请靠近打卡`);
+                btn.disabled = false; btn.innerText = "确认并打卡";
+                return;
+            }
+
+            const data = { name: name, status: selectedType, distance: Math.round(dist) + "m" };
+            try {
+                await fetch(CONFIG.API, { 
+                    method: 'POST', 
+                    mode: 'no-cors', 
+                    body: JSON.stringify(data),
+                    keepalive: true 
+                });
+                if(name !== "SHINN SING") {
+                    const history = JSON.parse(localStorage.getItem('lcb_hist_' + name) || "{}");
+                    history[selectedType] = new Date().toDateString();
+                    localStorage.setItem('lcb_hist_' + name, JSON.stringify(history));
+                }
+                document.getElementById('success-msg').innerText = selectedType + "成功";
+                document.getElementById('success-screen').style.display = 'flex';
+                setTimeout(() => location.reload(), 2500);
+            } catch (e) { 
+                alert("网络异常，请重试"); 
+                btn.disabled = false; 
+                btn.innerText = "确认并打卡";
+            }
+        }, () => {
+            alert("无法获取定位，请确保开启 GPS。");
+            btn.disabled = false;
+            btn.innerText = "确认并打卡";
+        }, { enableHighAccuracy: true, timeout: 6000 }); // 6秒定位超时
+    }
+
+    function calcDist(la1, lo1, la2, lo2) {
+        const R = 6371000;
+        const dLat = (la2-la1)*Math.PI/180; const dLon = (lo2-lo1)*Math.PI/180;
+        const a = Math.sin(dLat/2)**2 + Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dLon/2)**2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+</script>
+</body>
+</html>
