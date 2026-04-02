@@ -1,30 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>LCB TOUR | 考勤管理终端</title>
+    <style>
+        :root { --primary: #007aff; --success: #34c759; --warning: #ff9500; --danger: #ff3b30; --bg: #f2f2f7; }
+        body { font-family: -apple-system, sans-serif; margin: 0; background: #eef2f7; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .container { position: relative; width: 92%; max-width: 400px; background: white; border-radius: 40px; padding: 30px 20px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
+        #clock { font-size: 40px; font-weight: 700; margin: 10px 0; }
+        select { width: 100%; padding: 15px; border-radius: 15px; border: none; background: #f2f2f7; font-size: 16px; margin-bottom: 20px; font-weight: bold; }
+        .button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .btn-status { padding: 20px 10px; border: none; border-radius: 20px; font-weight: bold; color: white; cursor: pointer; }
+        .btn-in { background: var(--primary); } .btn-out { background: var(--warning); } .btn-back { background: var(--success); } .btn-off { background: var(--danger); }
+        #video-container { width: 100%; height: 250px; background: #000; border-radius: 20px; overflow: hidden; margin-bottom: 20px; display: none; }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        #btn-confirm { width: 100%; padding: 20px; border-radius: 20px; border: none; background: #1c1c1e; color: white; font-size: 18px; font-weight: bold; display: none; }
+        #success-screen { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 100; border-radius: 40px; flex-direction: column; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div id="success-screen"><div style="font-size:80px">✅</div><h2>打卡成功</h2><p>数据已同步至表格</p></div>
+    <h2>LCB 智能考勤</h2>
+    <div id="clock">00:00:00</div>
+    <select id="empSelect" onchange="lockUser()">
+        <option value="">-- 加载名单中... --</option>
+    </select>
+    <div class="button-grid">
+        <button class="btn-status btn-in" onclick="prep('上班签到')">☀️ 上班</button>
+        <button class="btn-status btn-out" onclick="prep('午餐出门')">🍕 午餐出</button>
+        <button class="btn-status btn-back" onclick="prep('午餐回来')">☕ 午餐回</button>
+        <button class="btn-status btn-off" onclick="prep('下班签退')">🌙 下班</button>
+    </div>
+    <div id="video-container"><video id="video" autoplay playsinline></video></div>
+    <button id="btn-confirm" onclick="submit()">确认提交打卡</button>
+</div>
+
 <script>
     const CONFIG = {
-        LAT: 1.857346, LNG: 102.929273, RADIUS: 100,
-        API: "https://script.google.com/macros/s/AKfycbxvMUeco6V_w4QgyLrvLVbtLrKOnuGC8jAR--dlxV5sJ4jarPSA5vaKdYP49tYFEE0Ecg/exec"
+        API: "https://script.google.com/macros/s/AKfycbxvMUeco6V_w4QgyLrvLVbtLrKOnuGC8jAR--dlxV5sJ4jarPSA5vaKdYP49tYFEE0Ecg/exec",
+        LAT: 1.857346, LNG: 102.929273, RADIUS: 100
+    };
+    let currentStatus = "";
+
+    window.onload = async () => {
+        setInterval(() => document.getElementById('clock').innerText = new Date().toLocaleTimeString('zh-CN',{hour12:false}), 1000);
+        try {
+            const res = await fetch(CONFIG.API);
+            const names = await res.json();
+            const sel = document.getElementById('empSelect');
+            sel.innerHTML = '<option value="">-- 请选择姓名 --</option>';
+            names.forEach(n => sel.add(new Option(n, n)));
+            if(localStorage.getItem('lcb_user')) {
+                sel.value = localStorage.getItem('lcb_user');
+                if(sel.value !== "SHINN SING") sel.disabled = true;
+            }
+        } catch(e) { alert("名单同步失败"); }
     };
 
-    // 找到 finalSubmit 函数，把 fetch 部分改成这样：
-    async function finalSubmit() {
-        // ... 前面的代码保持不变 ...
-        try {
-            const response = await fetch(CONFIG.API, { 
-                method: 'POST', 
-                body: JSON.stringify(data) 
-            });
-            const result = await response.text();
-            
-            if (result.includes("Success")) {
-                // 只有后端返回 Success 才显示成功画面
-                document.getElementById('success-screen').style.display = 'flex';
-                setTimeout(() => location.reload(), 2000);
-            } else {
-                alert("❌ 失败：后台无法写入数据，请检查标签页名字是否为 APR");
-                btn.disabled = false;
-            }
-        } catch (e) {
-            alert("❌ 错误：无法连接到 Google 服务器，请检查网络。");
-            btn.disabled = false;
-        }
+    function lockUser() { localStorage.setItem('lcb_user', document.getElementById('empSelect').value); }
+
+    async function prep(s) {
+        if(!document.getElementById('empSelect').value) return alert("请先选择姓名");
+        currentStatus = s;
+        document.getElementById('video-container').style.display = 'block';
+        document.getElementById('btn-confirm').style.display = 'block';
+        const stream = await navigator.mediaDevices.getUserMedia({video: {facingMode:"user"}});
+        document.getElementById('video').srcObject = stream;
+    }
+
+    function submit() {
+        const btn = document.getElementById('btn-confirm');
+        btn.disabled = true; btn.innerText = "上传中...";
+        navigator.geolocation.getCurrentPosition(async (p) => {
+            const data = {
+                name: document.getElementById('empSelect').value,
+                status: currentStatus,
+                distance: "OK"
+            };
+            try {
+                const res = await fetch(CONFIG.API, { method: 'POST', body: JSON.stringify(data) });
+                const txt = await res.text();
+                if(txt.includes("Success")) {
+                    document.getElementById('success-screen').style.display = 'flex';
+                    setTimeout(() => location.reload(), 2000);
+                } else { alert("后台报错: " + txt); btn.disabled = false; }
+            } catch(e) { alert("提交失败，请检查网络"); btn.disabled = false; }
+        }, () => alert("请开启定位权限"), {enableHighAccuracy: true});
     }
 </script>
+</body>
+</html>
